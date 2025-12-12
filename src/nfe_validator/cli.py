@@ -147,6 +147,15 @@ class NFeValidator:
                         error_message=str(e),
                     ))
     
+    def process_file(self, xml_file: Path):
+        """
+        Processa um arquivo XML individual (público para uso da GUI).
+        
+        Args:
+            xml_file: Caminho do arquivo
+        """
+        self._process_file(xml_file)
+    
     def _process_file(self, xml_file: Path):
         """
         Processa um arquivo XML individual.
@@ -182,20 +191,16 @@ class NFeValidator:
                 error_message=str(e),
             ))
     
-    def _generate_report(self, output_dir: Path):
+    def generate_report(self, report_path: Path):
         """
-        Gera relatório Excel.
+        Gera relatório Excel (público para uso da GUI).
         
         Args:
-            output_dir: Diretório de saída
+            report_path: Caminho do arquivo de relatório
         """
         if not self.results and not self.errors:
             logger.warning("Nenhum resultado para gerar relatório")
             return
-        
-        # Nome do arquivo com timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = output_dir / f"relatorio_ibs_cbs_{timestamp}.xlsx"
         
         # Resumo da configuração
         config_summary = {
@@ -213,6 +218,50 @@ class NFeValidator:
         generator.generate(self.results, self.errors, config_summary)
         
         logger.info(f"\nRelatório gerado: {report_path}")
+    
+    def get_statistics(self) -> dict:
+        """
+        Retorna estatísticas do processamento (público para uso da GUI).
+        
+        Returns:
+            Dicionário com estatísticas
+        """
+        total_nfes = len(self.results)
+        total_itens = sum(r.total_itens for r in self.results)
+        total_diverg_ibs = sum(r.count_divergencias_ibs for r in self.results)
+        total_diverg_cbs = sum(r.count_divergencias_cbs for r in self.results)
+        
+        # Calcula itens OK: total - divergências IBS - divergências CBS (sem contar duplicados)
+        items_ok = 0
+        for r in self.results:
+            # Conta quantos itens têm status OK em ambos IBS e CBS
+            for item in r.itens_resultado:
+                from .models import ValidationStatus
+                if (item.status_ibs == ValidationStatus.OK and 
+                    item.status_cbs == ValidationStatus.OK):
+                    items_ok += 1
+        
+        return {
+            "total_nfes": total_nfes,
+            "total_items": total_itens,
+            "items_ok": items_ok,
+            "divergencias_ibs": total_diverg_ibs,
+            "divergencias_cbs": total_diverg_cbs,
+            "total_errors": len(self.errors),
+        }
+    
+    def _generate_report(self, output_dir: Path):
+        """
+        Gera relatório Excel.
+        
+        Args:
+            output_dir: Diretório de saída
+        """
+        # Nome do arquivo com timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = output_dir / f"relatorio_ibs_cbs_{timestamp}.xlsx"
+        
+        self.generate_report(report_path)
     
     def _print_summary(self):
         """Imprime resumo final no console."""

@@ -237,3 +237,31 @@ class Config:
             yaml.dump(self.to_dict(), f, default_flow_style=False, allow_unicode=True, sort_keys=False)
         
         logger.info(f"Configuração salva em: {yaml_path}")
+
+
+def load_config(config_path: Optional[str] = None) -> Config:
+    """
+    Carrega configuração de um arquivo YAML ou retorna configuração padrão.
+    
+    Args:
+        config_path: Caminho para arquivo de configuração. Se None, busca por 
+                    config.yaml ou config.example.yaml no diretório atual.
+    
+    Returns:
+        Config: Objeto de configuração
+    """
+    if config_path is None:
+        # Busca por config.yaml ou config.example.yaml
+        if Path("config.yaml").exists():
+            config_path = "config.yaml"
+        elif Path("config.example.yaml").exists():
+            config_path = "config.example.yaml"
+        else:
+            logger.warning("Nenhum arquivo de configuração encontrado. Usando configuração padrão.")
+            return Config()
+    
+    try:
+        return Config.from_yaml(config_path)
+    except Exception as e:
+        logger.warning(f"Erro ao carregar configuração: {e}. Usando configuração padrão.")
+        return Config()

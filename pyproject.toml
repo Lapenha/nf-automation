@@ -25,12 +25,13 @@ classifiers = [
 ]
 
 dependencies = [
-    "lxml>=4.9.0",
+    "lxml>=5.0.0",
     "pandas>=2.0.0",
     "openpyxl>=3.1.0",
-    "pyyaml>=6.0",j
+    "pyyaml>=6.0",
     "tqdm>=4.65.0",
     "python-dateutil>=2.8.0",
+    "PyQt6>=6.6.0",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +44,10 @@ dev = [
 
 [project.scripts]
 nfe-validator = "nfe_validator.cli:main"
+nfe-validator-gui = "nfe_validator.gui:main"
+
+[project.gui-scripts]
+nfe-validator-gui = "nfe_validator.gui:main"
 
 [project.urls]
 Homepage = "https://github.com/muriloalapenhaSoares/nfe-ibs-cbs-validator"

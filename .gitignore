@@ -28,7 +28,11 @@ MANIFEST
 
 # PyInstaller
 *.manifest
-*.spec
+# *.spec  # Não ignorar .spec customizado
+build/
+dist/
+*.ico
+icon.png
 
 # Installer logs
 pip-log.txt

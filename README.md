@@ -79,6 +79,42 @@ pip install -e .
 
 ---
 
+## 🎨 Interface Gráfica (Nova!)
+
+**Agora com interface visual moderna e intuitiva!**
+
+### Como Usar a GUI
+
+#### Opção 1: Executável Standalone (Recomendado)
+
+```powershell
+# Gerar o executável
+.\build_exe.ps1
+
+# O executável estará em: dist\ValidadorNFe.exe
+# Pode ser copiado para qualquer computador Windows!
+```
+
+#### Opção 2: Executar com Python
+
+```powershell
+# Após instalação
+python -m nfe_validator.gui
+```
+
+### Recursos da Interface
+
+- 📁 **Arrastar e Soltar**: Arraste XMLs diretamente para a janela
+- 📂 **Seleção de Pasta**: Escolha uma pasta com múltiplos XMLs
+- 📄 **Múltiplos Arquivos**: Adicione arquivos individualmente
+- 📊 **Progresso em Tempo Real**: Barra de progresso e logs visuais
+- 💾 **Salva em Downloads**: Relatório automaticamente salvo na pasta Downloads
+- ✨ **Design Moderno**: Interface limpa e profissional
+
+> **Veja o [GUI_GUIDE.md](GUI_GUIDE.md) para guia completo com screenshots!**
+
+---
+
 ## ⚙️ Configuração
 
 ### 1. Copie o arquivo de exemplo
