@@ -1,0 +1,64 @@
+# =============================================================================
+# Configuração do Validador de NF-e IBS/CBS
+# =============================================================================
+
+# Diretórios
+input_dir: "./xmls"              # Pasta com os XMLs de NF-e
+output_dir: "./output"           # Pasta para salvar relatórios e logs
+
+# Tolerâncias para comparação
+tolerance:
+  absolute: 0.05                 # Tolerância absoluta em reais
+  percentage: 0.1                # Tolerância percentual (0.1 = 0.1%)
+
+# Componentes a incluir no cálculo da base
+include_components:
+  freight: true                  # Incluir frete (vFrete)
+  insurance: true                # Incluir seguro (vSeg)
+  other: true                    # Incluir outras despesas (vOutro)
+  discount: true                 # Subtrair desconto (vDesc)
+  ipi: false                     # Incluir IPI (vIPI)
+  ii: false                      # Incluir II (vII)
+  icms_st: false                 # Incluir ICMS ST (vICMSST)
+  fcp_st: false                  # Incluir FCP ST (vFCPST)
+  pis: false                     # Incluir PIS (vPIS)
+  cofins: false                  # Incluir COFINS (vCOFINS)
+
+# Configurações de execução
+execution:
+  only_divergences: false        # Processar apenas divergentes (false = todos)
+  max_files: null                # Limite de arquivos (null = todos)
+  workers: 1                     # Número de workers paralelos (1 = sequencial)
+  debug: false                   # Modo debug (mais logs)
+  recurse_subfolders: true       # Buscar em subpastas
+
+# XPaths para localizar IBS e CBS no XML
+# Se os XMLs usarem estrutura diferente, ajuste aqui
+xpaths:
+  ibs:
+    base_paths:
+      - ".//*[local-name()='IBS']/*[local-name()='vBC']"
+      - ".//*[local-name()='vBCIBS']"
+      - ".//*[local-name()='IBS']/*[local-name()='vBCTrib']"
+    rate_paths:
+      - ".//*[local-name()='IBS']/*[local-name()='pIBS']"
+      - ".//*[local-name()='pAliqIBS']"
+      - ".//*[local-name()='IBS']/*[local-name()='pAliq']"
+    value_paths:
+      - ".//*[local-name()='IBS']/*[local-name()='vIBS']"
+      - ".//*[local-name()='vIBS']"
+      - ".//*[local-name()='IBS']/*[local-name()='vTrib']"
+  
+  cbs:
+    base_paths:
+      - ".//*[local-name()='CBS']/*[local-name()='vBC']"
+      - ".//*[local-name()='vBCCBS']"
+      - ".//*[local-name()='CBS']/*[local-name()='vBCTrib']"
+    rate_paths:
+      - ".//*[local-name()='CBS']/*[local-name()='pCBS']"
+      - ".//*[local-name()='pAliqCBS']"
+      - ".//*[local-name()='CBS']/*[local-name()='pAliq']"
+    value_paths:
+      - ".//*[local-name()='CBS']/*[local-name()='vCBS']"
+      - ".//*[local-name()='vCBS']"
+      - ".//*[local-name()='CBS']/*[local-name()='vTrib']"
