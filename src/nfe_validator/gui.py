@@ -10,7 +10,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QProgressBar, QFileDialog, QMessageBox,
-    QTextEdit, QFrame
+    QTextEdit, QFrame, QScrollArea
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QMimeData
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont, QIcon
@@ -236,9 +236,22 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Validador NF-e - IBS/CBS (Reforma Tributária)")
         self.setGeometry(100, 100, 900, 700)
         
-        # Widget central
+        # Widget central com scroll
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: white;
+            }
+        """)
+        self.setCentralWidget(scroll_area)
+        
+        # Container para o conteúdo
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        scroll_area.setWidget(central_widget)
         
         # Layout principal
         main_layout = QVBoxLayout()
@@ -250,7 +263,7 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("""
             font-size: 28px;
             font-weight: bold;
-            color: #212529;
+            color: black;
             padding: 10px;
         """)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -258,7 +271,7 @@ class MainWindow(QMainWindow):
         
         # Subtítulo
         subtitle = QLabel("Validação automática de tributos da Reforma Tributária")
-        subtitle.setStyleSheet("font-size: 14px; color: #6c757d;")
+        subtitle.setStyleSheet("font-size: 14px; color: black;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(subtitle)
         
@@ -293,7 +306,7 @@ class MainWindow(QMainWindow):
         
         # Label de arquivos selecionados
         self.files_label = QLabel("Nenhum arquivo selecionado")
-        self.files_label.setStyleSheet("font-size: 13px; color: #495057; padding: 10px;")
+        self.files_label.setStyleSheet("font-size: 13px; color: black; padding: 10px;")
         self.files_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(self.files_label)
         
@@ -329,7 +342,8 @@ class MainWindow(QMainWindow):
         self.log_text.setReadOnly(True)
         self.log_text.setStyleSheet("""
             QTextEdit {
-                background-color: #f8f9fa;
+                background-color: white;
+                color: black;
                 border: 1px solid #dee2e6;
                 border-radius: 5px;
                 padding: 10px;
@@ -349,7 +363,11 @@ class MainWindow(QMainWindow):
         # Estilo geral da janela
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #ffffff;
+                background-color: white;
+            }
+            QWidget {
+                background-color: white;
+                color: black;
             }
         """)
     
