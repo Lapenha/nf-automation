@@ -12,6 +12,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('config.example.yaml', '.'),
+        ('icon.ico', '.'),
     ],
     hiddenimports=[
         'lxml',
@@ -62,5 +63,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Sem icone por enquanto
+    icon='icon.ico',  # Ícone do executável
 )

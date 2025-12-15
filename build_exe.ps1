@@ -48,10 +48,17 @@ if ($LASTEXITCODE -ne 0) {
 
 # Cria o icone se nao existir
 if (-not (Test-Path "icon.ico")) {
-    Write-Host "Icone nao encontrado. Criando icone..." -ForegroundColor Yellow
-    
-    # Tenta criar icone com Python
-    $pythonCode = @'
+    Write-Host "Icone nao encontrado. Criando icone com create_icon.py..." -ForegroundColor Yellow
+
+    # Tenta criar icone chamando o script create_icon.py (mais completo)
+    if (Test-Path "create_icon.py") {
+        & "$PWD\venv\Scripts\python.exe" "create_icon.py"
+    }
+
+    # Se ainda nao existir, tenta criar um ícone simples por fallback
+    if (-not (Test-Path "icon.ico")) {
+        Write-Host "create_icon.py falhou ou Pillow nao instalado. Gerando icone simples como fallback..." -ForegroundColor Yellow
+        $pythonCode = @'
 try:
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGBA", (256, 256), (255, 255, 255, 0))
@@ -67,13 +74,14 @@ try:
 except:
     print("ERRO")
 '@
-    
-    $result = $pythonCode | & "$PWD\venv\Scripts\python.exe" 2>$null
-    
-    # Se falhar, cria icone vazio
-    if (-not (Test-Path "icon.ico")) {
-        Write-Host "Usando icone padrao..." -ForegroundColor Yellow
-        New-Item -Path "icon.ico" -ItemType File -Force | Out-Null
+
+        $result = $pythonCode | & "$PWD\venv\Scripts\python.exe" 2>$null
+
+        # Se falhar, cria icone vazio
+        if (-not (Test-Path "icon.ico")) {
+            Write-Host "Usando icone padrao..." -ForegroundColor Yellow
+            New-Item -Path "icon.ico" -ItemType File -Force | Out-Null
+        }
     }
 }
 
