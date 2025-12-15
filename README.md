@@ -171,6 +171,33 @@ Você pode habilitar componentes adicionais (IPI, II, ICMS-ST, etc.) editando o 
 python -m nfe_validator --config config.yaml
 ```
 
+---
+
+## 🛠️ Gerar Instalador Windows (Inno Setup)
+
+Se você quer distribuir o programa para outros computadores Windows com um instalador profissional (cria atalho no menu Iniciar e na Área de Trabalho), use o Inno Setup.
+
+1) Gere o executável primeiro (já feito pelo script de build):
+
+```powershell
+.\venv\Scripts\Activate.ps1
+.\build_exe.ps1
+```
+
+2) Gere o instalador com Inno Setup:
+
+- Instale o Inno Setup: https://jrsoftware.org/isinfo.php
+- Depois execute no diretório do projeto:
+
+```powershell
+.\make_installer.ps1
+```
+
+O script procura por `iscc.exe` (Inno Setup Compiler) e compilá `installer.iss`, produzindo um instalador `.exe`.
+
+O instalador inclui o `dist\ValidadorNFe.exe`, `icon.ico` e `config.example.yaml`, e cria atalhos no Menu Iniciar e (opcional) na Área de Trabalho.
+
+
 ### Sobrescrever configurações via CLI
 
 ```powershell

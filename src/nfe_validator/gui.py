@@ -4,6 +4,7 @@ Interface moderna com drag-and-drop, seleção de pasta e barra de progresso.
 """
 import sys
 import os
+import ctypes
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
@@ -546,7 +547,44 @@ class MainWindow(QMainWindow):
 
 def main():
     """Função principal da GUI."""
+    # On Windows, set an explicit AppUserModelID so the shell uses the
+    # application's icon (and groups windows correctly). This should be
+    # done before creating windows / the QApplication when possible.
+    if sys.platform.startswith("win"):
+        try:
+            app_id = u"com.lapenha.validadornfe"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+        except Exception:
+            # Not fatal — continue even if API call fails
+            pass
+
     app = QApplication(sys.argv)
+
+    # Define o ícone da aplicação para garantir que apareça em todos os lugares
+    def _resource_path(name: str) -> str:
+        # Quando empacotado com PyInstaller, recursos ficam em sys._MEIPASS
+        if getattr(sys, 'frozen', False):
+            base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+        else:
+            # Ao rodar a partir do código-fonte, procura no diretório do projeto
+            base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        candidate = os.path.join(base, name)
+        if os.path.exists(candidate):
+            return candidate
+        # fallback: procurar no cwd
+        if os.path.exists(name):
+            return os.path.abspath(name)
+        return candidate
+
+    icon_path = _resource_path('icon.ico')
+    if not os.path.exists(icon_path):
+        # tenta png como fallback
+        icon_path = _resource_path('icon.png')
+    try:
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+    except Exception:
+        pass
     
     # Fonte padrão
     font = QFont("Segoe UI", 10)
@@ -554,6 +592,12 @@ def main():
     
     # Janela principal
     window = MainWindow()
+    # garante que a janela principal também use o mesmo ícone
+    try:
+        if os.path.exists(icon_path):
+            window.setWindowIcon(QIcon(icon_path))
+    except Exception:
+        pass
     window.show()
     
     sys.exit(app.exec())
