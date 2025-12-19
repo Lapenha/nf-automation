@@ -58,6 +58,11 @@ class ExcelReportGenerator:
             df_itens.to_excel(writer, sheet_name="Itens", index=False)
             df_divergencias.to_excel(writer, sheet_name="Divergências", index=False)
             df_erros.to_excel(writer, sheet_name="Erros", index=False)
+            # Aba com todas as tags extraídas (por nota)
+            df_tags = self._create_tags_df(results)
+            df_tags.to_excel(writer, sheet_name="Tags", index=False)
+            # Aba combinada: todos os dados concatenados por documento com separadores
+            self._create_combined_sheet(writer, results)
             
             # Adicionar aba de configuração se fornecida
             if config_summary:
@@ -195,6 +200,40 @@ class ExcelReportGenerator:
             })
         
         return pd.DataFrame(data)
+
+    def _create_tags_df(self, results: List[ComparisonResult]) -> pd.DataFrame:
+        """Cria DataFrame com todas as tags encontradas em cada NF-e.
+
+        Colunas: Arquivo, Chave NF-e, TagPath, TagName, Valor
+        """
+        data = []
+
+        for result in results:
+            nfe = result.nfe
+            tags = getattr(nfe, 'tags', {}) or {}
+
+            # Se não houver tags, mantemos uma linha indicando ausência
+            if not tags:
+                data.append({
+                    "Arquivo": nfe.arquivo,
+                    "Chave NF-e": nfe.chave,
+                    "TagPath": "",
+                    "TagName": "",
+                    "Valor": "",
+                })
+                continue
+
+            for path, value in tags.items():
+                tag_name = path.split('/')[-1] if path else ''
+                data.append({
+                    "Arquivo": nfe.arquivo,
+                    "Chave NF-e": nfe.chave,
+                    "TagPath": path,
+                    "TagName": tag_name,
+                    "Valor": value if value is not None else "",
+                })
+
+        return pd.DataFrame(data)
     
     def _apply_formatting(self):
         """Aplica formatação ao arquivo Excel."""
@@ -263,6 +302,98 @@ class ExcelReportGenerator:
         # Destacar status na aba Resumo
         if sheet_name == "Resumo NF":
             self._highlight_status_resumo(ws)
+
+        # Formatação para Combined: destacar linhas separadoras (se existirem)
+        if sheet_name == "Combined":
+            self._format_combined(ws)
+
+    def _create_combined_sheet(self, writer, results: List[ComparisonResult]):
+        """Cria uma aba 'Combined' que contém blocos por documento separados por uma linha de cabeçalho."""
+        start_row = 0
+        workbook = writer.book
+        sheet_name = "Combined"
+        # criar sheet vazia para garantir presença
+        workbook.create_sheet(title=sheet_name)
+        ws = workbook[sheet_name]
+
+        for result in results:
+            nfe = result.nfe
+
+            # Cabeçalho separador (arquivo — chave — status)
+            header = f"Arquivo: {nfe.arquivo} | Chave: {nfe.chave} | Status: {result.status_geral.value}"
+            ws.cell(row=start_row + 1, column=1, value=header)
+            ws.cell(row=start_row + 1, column=1).font = Font(bold=True)
+
+            # Informações principais (metadados)
+            meta = {
+                "Número": nfe.nNF,
+                "Série": nfe.serie,
+                "Data Emissão": nfe.dhEmi.strftime("%d/%m/%Y %H:%M") if getattr(nfe, 'dhEmi', None) else "",
+                "Emitente CNPJ": nfe.emit_CNPJ,
+                "Emitente Nome": nfe.emit_xNome,
+                "Emitente UF": nfe.emit_UF,
+            }
+            # Escrever metadados como duas colunas
+            r = start_row + 2
+            for k, v in meta.items():
+                ws.cell(row=r, column=1, value=k)
+                ws.cell(row=r, column=2, value=v)
+                r += 1
+
+            # Itens (se houver)
+            itens_df = None
+            if result.itens_resultado:
+                itens_df = pd.DataFrame([{
+                    "Item": it.nItem,
+                    "Cód. Produto": it.cProd,
+                    "Descrição": it.xProd,
+                    "Base Calc IBS": float(it.base_calc_ibs),
+                    "Base XML IBS": float(it.base_xml_ibs) if it.base_xml_ibs else None,
+                    "Valor XML IBS": float(it.valor_xml_ibs) if it.valor_xml_ibs else None,
+                } for it in result.itens_resultado])
+
+            # Tags (se houver)
+            tags = getattr(nfe, 'tags', {}) or {}
+            tags_df = None
+            if tags:
+                tags_df = pd.DataFrame([{"TagPath": k, "Valor": v} for k, v in tags.items()])
+
+            # Escrever itens_df e tags_df usando pandas to_excel com startrow
+            write_row = r + 1
+            if itens_df is not None and not itens_df.empty:
+                ws.cell(row=write_row, column=1, value="Itens")
+                ws.cell(row=write_row, column=1).font = Font(bold=True)
+                write_row += 1
+                itens_df.to_excel(writer, sheet_name=sheet_name, startrow=write_row - 1, index=False)
+                # calcular linhas escritas
+                write_row += len(itens_df.index) + 1
+
+            if tags_df is not None and not tags_df.empty:
+                ws.cell(row=write_row, column=1, value="Tags")
+                ws.cell(row=write_row, column=1).font = Font(bold=True)
+                write_row += 1
+                tags_df.to_excel(writer, sheet_name=sheet_name, startrow=write_row - 1, index=False)
+                write_row += len(tags_df.index) + 1
+
+            # Avançar start_row para próximo bloco com uma linha em branco separadora
+            start_row = write_row + 2
+
+        # Depois de escrever via pandas, garantir que writer salva as mudanças (pandas fará no exit)
+
+    def _format_combined(self, ws):
+        """Formatação simples para a aba Combined: ajustar colunas e destacar headers."""
+        # Ajustar largura colunas
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 70)
+            ws.column_dimensions[column_letter].width = adjusted_width
     
     def _get_number_columns(self, sheet_name: str) -> List[str]:
         """Retorna letras das colunas numéricas por aba."""

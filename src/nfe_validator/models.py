@@ -68,14 +68,14 @@ class Item:
 class NFe:
     """Representa uma NF-e completa."""
     chave: str
-    nNF: str
-    serie: str
-    dhEmi: datetime
-    
+    nNF: str = ""
+    serie: str = ""
+    dhEmi: datetime = field(default_factory=datetime.now)
+
     # Emitente
-    emit_CNPJ: str
-    emit_xNome: str
-    emit_UF: str
+    emit_CNPJ: str = ""
+    emit_xNome: str = ""
+    emit_UF: str = ""
     
     # Destinatário
     dest_CNPJ: str = ""
@@ -89,6 +89,8 @@ class NFe:
     
     # Itens
     itens: List[Item] = field(default_factory=list)
+    # All XML tags extracted (path -> text)
+    tags: dict = field(default_factory=dict)
     
     # Metadados
     arquivo: str = ""

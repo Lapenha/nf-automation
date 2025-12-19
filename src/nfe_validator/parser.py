@@ -1,5 +1,5 @@
 """
-Parser de XMLs de NF-e (modelo 55).
+Parser de XMLs de NF-e (modelo 55) e NFCom (modelo 62).
 Extrai dados da nota e itens, incluindo IBS/CBS quando presentes.
 """
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class NFeParser:
-    """Parser de XML de NF-e com suporte a IBS/CBS."""
+    """Parser de XML de NF-e (modelo 55) e NFCom (modelo 62) com suporte a IBS/CBS."""
     
     def __init__(self, config: Config):
         """
@@ -36,7 +36,7 @@ class NFeParser:
     
     def parse_file(self, xml_path: Path) -> Optional[NFe]:
         """
-        Faz parse de um arquivo XML de NF-e.
+        Faz parse de um arquivo XML de NF-e ou NFCom.
         
         Args:
             xml_path: Caminho do arquivo XML
@@ -48,42 +48,116 @@ class NFeParser:
             tree = etree.parse(str(xml_path))
             root = tree.getroot()
             
-            # Encontrar infNFe (pode estar em nfeProc ou NFe)
-            inf_nfe = self._find_inf_nfe(root)
-            if inf_nfe is None:
-                logger.error(f"Elemento infNFe não encontrado em {xml_path.name}")
-                return None
-            
-            # Extrair dados da NF-e
-            nfe = self._extract_nfe_data(inf_nfe, xml_path.name)
-            
-            # Extrair itens
-            self._extract_items(inf_nfe, nfe)
+            # Detectar e tratar vários tipos de documento
+            # 1) infNFe / infNFCom (nota fiscal)
+            inf_doc = self._find_inf_document(root)
+            if inf_doc is not None:
+                # Extrair dados como NF-e/NFCom
+                nfe = self._extract_nfe_data(inf_doc, xml_path.name)
+                self._extract_items(inf_doc, nfe)
+                try:
+                    nfe.tags = self._collect_all_tags(inf_doc)
+                except Exception:
+                    nfe.tags = {}
+
+                logger.debug(f"Parsed {xml_path.name}: {len(nfe.itens)} itens")
+                return nfe
+
+            # 2) retNFCom / protNFCom (protocolo de autorização) - extrair infProt
+            prot = root.xpath(".//*[local-name()='infProt']")
+            if prot:
+                node = prot[0]
+                nfe = NFe(chave=extract_text_safe(node, ".//*[local-name()='chNFCom']"), arquivo=xml_path.name)
+                try:
+                    nfe.tags = self._collect_all_tags(node)
+                except Exception:
+                    nfe.tags = {}
+                logger.debug(f"Parsed protocolo {xml_path.name}: chave {nfe.chave}")
+                return nfe
+
+            # 3) UBL / Sovos canonical invoice -> buscar inv:Invoice ou elemento local-name() = 'Invoice'
+            inv = root.xpath(".//*[local-name()='Invoice']")
+            if inv:
+                node = inv[0]
+                # tentar obter UUID/cbc:UUID ou ID
+                chave = extract_text_safe(node, ".//*[local-name()='UUID']") or extract_text_safe(node, ".//*[local-name()='ID']")
+                nfe = NFe(chave=chave or '', arquivo=xml_path.name)
+                try:
+                    nfe.tags = self._collect_all_tags(node)
+                except Exception:
+                    nfe.tags = {}
+                logger.debug(f"Parsed UBL Invoice {xml_path.name}: chave {nfe.chave}")
+                return nfe
+
+            # 4) DPS / NFS-e (infDPS)
+            inf_dps = root.xpath(".//*[local-name()='infDPS']")
+            if inf_dps:
+                node = inf_dps[0]
+                chave = node.get('Id', '')
+                # nDPS as fallback
+                if not chave:
+                    chave = extract_text_safe(node, ".//*[local-name()='nDPS']")
+                nfe = NFe(chave=chave or '', arquivo=xml_path.name)
+                try:
+                    nfe.tags = self._collect_all_tags(node)
+                except Exception:
+                    nfe.tags = {}
+                logger.debug(f"Parsed DPS {xml_path.name}: chave {nfe.chave}")
+                return nfe
+
+            # 5) TXT key=value (fallback for non-XML structured txt files)
+            # Note: this branch is reached only for parsed XML-like inputs; TXT files are handled elsewhere by CLI file listing.
+            logger.error(f"Elemento infNFe/infNFCom/infDPS/Invoice/protNFCom não encontrado em {xml_path.name}")
+            return None
             
             logger.debug(f"Parsed {xml_path.name}: {len(nfe.itens)} itens")
             return nfe
             
         except etree.XMLSyntaxError as e:
-            logger.error(f"Erro de sintaxe XML em {xml_path.name}: {e}")
-            return None
+            # Tentar interpretar como arquivo TXT chave=valor (se aplicável)
+            try:
+                text = Path(xml_path).read_text(encoding='utf-8', errors='ignore')
+                parts = text.split('|')
+                tags = {}
+                chave = ''
+                for p in parts:
+                    if '=' in p:
+                        k, v = p.split('=', 1)
+                        k = k.strip()
+                        v = v.strip()
+                        tags[f'TXT/{k}'] = v
+                        if k.lower() in ('numerorps', 'ndps', 'ndps', 'numerorps') and not chave:
+                            chave = v
+                if not chave:
+                    # tentar extrair algum identificador genérico
+                    chave = tags.get('TXT/numeroRps', '') or tags.get('TXT/nDPS', '')
+                nfe = NFe(chave=chave or '', arquivo=xml_path.name)
+                nfe.tags = tags
+                logger.debug(f"Parsed TXT fallback {xml_path.name}: keys {len(tags)}")
+                return nfe
+            except Exception:
+                logger.error(f"Erro de sintaxe XML em {xml_path.name}: {e}")
+                return None
         except Exception as e:
             logger.error(f"Erro ao processar {xml_path.name}: {e}", exc_info=True)
             return None
     
-    def _find_inf_nfe(self, root: etree._Element) -> Optional[etree._Element]:
+    def _find_inf_document(self, root: etree._Element) -> Optional[etree._Element]:
         """
-        Encontra elemento infNFe independente de namespace.
+        Encontra elemento infNFe ou infNFCom independente de namespace.
         
         Args:
             root: Elemento raiz do XML
         
         Returns:
-            Elemento infNFe ou None
+            Elemento infNFe/infNFCom ou None
         """
         # Tentar com local-name (ignora namespace)
         xpaths = [
             ".//*[local-name()='infNFe']",
+            ".//*[local-name()='infNFCom']",
             ".//infNFe",
+            ".//infNFCom",
         ]
         
         for xpath in xpaths:
@@ -98,10 +172,10 @@ class NFeParser:
     
     def _extract_nfe_data(self, inf_nfe: etree._Element, arquivo: str) -> NFe:
         """
-        Extrai dados principais da NF-e.
+        Extrai dados principais da NF-e ou NFCom.
         
         Args:
-            inf_nfe: Elemento infNFe
+            inf_nfe: Elemento infNFe ou infNFCom
             arquivo: Nome do arquivo
         
         Returns:
@@ -111,6 +185,8 @@ class NFeParser:
         chave = inf_nfe.get("Id", "")
         if chave.startswith("NFe"):
             chave = chave[3:]
+        elif chave.startswith("NFCom"):
+            chave = chave[5:]
         
         # Identificação
         ide = inf_nfe.xpath(".//*[local-name()='ide']")[0]
@@ -168,10 +244,10 @@ class NFeParser:
     
     def _extract_items(self, inf_nfe: etree._Element, nfe: NFe):
         """
-        Extrai itens da NF-e.
+        Extrai itens da NF-e ou NFCom.
         
         Args:
-            inf_nfe: Elemento infNFe
+            inf_nfe: Elemento infNFe ou infNFCom
             nfe: Objeto NFe para adicionar itens
         """
         det_list = inf_nfe.xpath(".//*[local-name()='det']")
@@ -184,6 +260,37 @@ class NFeParser:
             except Exception as e:
                 nItem = det.get("nItem", "?")
                 logger.warning(f"Erro ao extrair item {nItem} de {nfe.arquivo}: {e}")
+
+    def _collect_all_tags(self, inf_nfe: etree._Element) -> dict:
+        """
+        Percorre todos os elementos abaixo de infNFe/infNFCom e retorna um dicionário
+        com o caminho composto por nomes locais e o texto (ou string vazia).
+        """
+        tags = {}
+
+        def local_name(elem):
+            return etree.QName(elem).localname
+
+        # Detectar tipo de documento (infNFe ou infNFCom)
+        root_name = local_name(inf_nfe)
+
+        for elem in inf_nfe.xpath('.//*'):
+            try:
+                parts = []
+                node = elem
+                # subir até inf_nfe/inf_nfcom
+                while node is not None and node != inf_nfe:
+                    parts.insert(0, local_name(node))
+                    node = node.getparent()
+
+                # prefix with infNFe or infNFCom
+                path = f'{root_name}/' + '/'.join(parts) if parts else root_name
+                text = elem.text.strip() if (elem.text and elem.text.strip() != '') else ''
+                tags[path] = text
+            except Exception:
+                continue
+
+        return tags
     
     def _extract_item(self, det: etree._Element) -> Optional[Item]:
         """
