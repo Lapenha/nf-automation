@@ -280,7 +280,35 @@ class NFeParser:
                 node = elem
                 # subir até inf_nfe/inf_nfcom
                 while node is not None and node != inf_nfe:
-                    parts.insert(0, local_name(node))
+                    name = local_name(node)
+
+                    # Se for elemento de item 'det' use o atributo nItem quando disponível
+                    if name.lower() == 'det':
+                        n = node.get('nItem') or ''
+                        parts.insert(0, f"{name}[{n}]")
+                    else:
+                        # Para elementos que podem repetir, incluir índice entre irmãos para evitar sobrescrita
+                        # quando não houver atributo identificador.
+                        idx = ''
+                        try:
+                            # calcular posição entre irmãos com mesmo local-name
+                            pos = 1
+                            for sib in node.itersiblings(preceding=True):
+                                try:
+                                    if local_name(sib) == name:
+                                        pos += 1
+                                except Exception:
+                                    continue
+                            # somente adicionar índice se houver mais de um irmão com mesmo nome
+                            # (pos > 1 significa que já existiram anteriores)
+                            # também verificamos se existe algum irmão seguinte com mesmo nome
+                            has_next = any(True for _ in node.itersiblings() if local_name(_)==name)
+                            if pos > 1 or has_next:
+                                idx = f'[{pos}]'
+                        except Exception:
+                            idx = ''
+
+                        parts.insert(0, f"{name}{idx}")
                     node = node.getparent()
 
                 # prefix with infNFe or infNFCom
@@ -328,6 +356,9 @@ class NFeParser:
         # IBS/CBS do XML
         ibs_xml = self._extract_ibs_cbs(det, self.config.xpaths.ibs)
         cbs_xml = self._extract_ibs_cbs(det, self.config.xpaths.cbs)
+
+        # Tags XML específicas do item (prefix paths with det[nItem])
+        tags_xml = self._collect_tags_for_element(det, prefix=f"det[{nItem}]")
         
         return Item(
             nItem=nItem,
@@ -346,6 +377,7 @@ class NFeParser:
             tributos=tributos,
             ibs_xml=ibs_xml,
             cbs_xml=cbs_xml,
+            tags_xml=tags_xml,
         )
     
     def _extract_tributos(self, det: etree._Element) -> Tributos:
@@ -412,6 +444,59 @@ class NFeParser:
             vPIS=vPIS,
             vCOFINS=vCOFINS,
         )
+
+    def _collect_tags_for_element(self, element: etree._Element, prefix: str = '') -> dict:
+        """
+        Coleta tags (path -> text) para um elemento e seus filhos.
+
+        Args:
+            element: elemento raiz (ex.: det)
+            prefix: prefixo para a chave (ex.: 'det[1]')
+
+        Returns:
+            dicionário com chaves como 'prefix/child/grandchild' -> texto
+        """
+        tags = {}
+
+        def local_name(elem):
+            return etree.QName(elem).localname
+
+        for elem in element.xpath('.//*'):
+            try:
+                parts = []
+                node = elem
+                # subir até o elemento raiz (exclusive)
+                while node is not None and node != element:
+                    name = local_name(node)
+                    # incluir índice entre irmãos quando necessário to avoid collisions
+                    idx = ''
+                    try:
+                        pos = 1
+                        for sib in node.itersiblings(preceding=True):
+                            try:
+                                if local_name(sib) == name:
+                                    pos += 1
+                            except Exception:
+                                continue
+                        has_next = any(True for _ in node.itersiblings() if local_name(_)==name)
+                        if pos > 1 or has_next:
+                            idx = f'[{pos}]'
+                    except Exception:
+                        idx = ''
+
+                    parts.insert(0, f"{name}{idx}")
+                    node = node.getparent()
+
+                path = '/'.join(parts)
+                if prefix:
+                    path = f"{prefix}/{path}" if path else prefix
+
+                text = elem.text.strip() if (elem.text and elem.text.strip() != '') else ''
+                tags[path] = text
+            except Exception:
+                continue
+
+        return tags
     
     def _extract_ibs_cbs(self, det: etree._Element, xpath_config: XPathConfig) -> IBSCBSData:
         """

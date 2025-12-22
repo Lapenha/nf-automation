@@ -208,6 +208,8 @@ class ExcelReportGenerator:
         """
         data = []
 
+        import re
+
         for result in results:
             nfe = result.nfe
             tags = getattr(nfe, 'tags', {}) or {}
@@ -217,6 +219,7 @@ class ExcelReportGenerator:
                 data.append({
                     "Arquivo": nfe.arquivo,
                     "Chave NF-e": nfe.chave,
+                    "Item": None,
                     "TagPath": "",
                     "TagName": "",
                     "Valor": "",
@@ -225,9 +228,25 @@ class ExcelReportGenerator:
 
             for path, value in tags.items():
                 tag_name = path.split('/')[-1] if path else ''
+                # extrair número do item se path contiver det[<num>] e mapear para código do produto
+                produto_cod = None
+                m = re.search(r"det\[(\d+)\]", path or '')
+                if m:
+                    try:
+                        item_num = int(m.group(1))
+                        # buscar o produto correspondente em nfe.itens
+                        if hasattr(nfe, 'itens'):
+                            for item in nfe.itens:
+                                if item.nItem == item_num:
+                                    produto_cod = item.cProd
+                                    break
+                    except Exception as e:
+                        pass
+
                 data.append({
                     "Arquivo": nfe.arquivo,
                     "Chave NF-e": nfe.chave,
+                    "Item": produto_cod if produto_cod else "",
                     "TagPath": path,
                     "TagName": tag_name,
                     "Valor": value if value is not None else "",
@@ -356,7 +375,26 @@ class ExcelReportGenerator:
             tags = getattr(nfe, 'tags', {}) or {}
             tags_df = None
             if tags:
-                tags_df = pd.DataFrame([{"TagPath": k, "Valor": v} for k, v in tags.items()])
+                # incluir coluna Item para facilitar busca por item no Combined
+                import re
+                rows = []
+                for k, v in tags.items():
+                    # extrair código do produto se a tag pertence a det[n]
+                    produto_cod = None
+                    m = re.search(r"det\[(\d+)\]", k)
+                    if m:
+                        try:
+                            item_num = int(m.group(1))
+                            # buscar o produto correspondente
+                            if hasattr(nfe, 'itens'):
+                                for item in nfe.itens:
+                                    if item.nItem == item_num:
+                                        produto_cod = item.cProd
+                                        break
+                        except Exception:
+                            pass
+                    rows.append({"Item": produto_cod if produto_cod else "", "TagPath": k, "Valor": v})
+                tags_df = pd.DataFrame(rows)
 
             # Escrever itens_df e tags_df usando pandas to_excel com startrow
             write_row = r + 1

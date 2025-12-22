@@ -58,6 +58,8 @@ class Item:
     # Dados IBS/CBS extraídos do XML
     ibs_xml: IBSCBSData = field(default_factory=IBSCBSData)
     cbs_xml: IBSCBSData = field(default_factory=IBSCBSData)
+    # All XML tags related to this item (path relative to det[nItem] prefixed with det[nItem])
+    tags_xml: dict = field(default_factory=dict)
     
     # Bases calculadas (preenchidas pelo calculator)
     base_calculada_ibs: Optional[Decimal] = None
