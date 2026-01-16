@@ -58,11 +58,9 @@ class ExcelReportGenerator:
             df_itens.to_excel(writer, sheet_name="Itens", index=False)
             df_divergencias.to_excel(writer, sheet_name="Divergências", index=False)
             df_erros.to_excel(writer, sheet_name="Erros", index=False)
-            # Aba com todas as tags extraídas (por nota)
-            df_tags = self._create_tags_df(results)
-            df_tags.to_excel(writer, sheet_name="Tags", index=False)
-            # Aba combinada: todos os dados concatenados por documento com separadores
-            self._create_combined_sheet(writer, results)
+            
+            # Criar aba Tags em formato vertical (transposto)
+            self._create_tags_vertical(writer, results)
             
             # Adicionar aba de configuração se fornecida
             if config_summary:
@@ -200,59 +198,54 @@ class ExcelReportGenerator:
             })
         
         return pd.DataFrame(data)
-
-    def _create_tags_df(self, results: List[ComparisonResult]) -> pd.DataFrame:
-        """Cria DataFrame com todas as tags encontradas em cada NF-e.
-
-        Colunas: Arquivo, Chave NF-e, TagPath, TagName, Valor
+    
+    def _create_tags_vertical(self, writer, results: List[ComparisonResult]):
+        """Cria aba Tags em formato horizontal normal (como as outras abas).
+        
+        Formato:
+        - Cada linha é uma NF-e
+        - Cada coluna é uma tag/campo
         """
+        if not results:
+            return
+        
+        # Coletar todas as tags únicas de todas as NF-e
+        all_tags = set()
+        
+        for result in results:
+            nfe = result.nfe
+            if hasattr(nfe, 'tags') and nfe.tags:
+                all_tags.update(nfe.tags.keys())
+        
+        # Ordenar tags para consistência
+        sorted_tags = sorted(all_tags)
+        
+        # Criar dados para DataFrame
         data = []
-
-        import re
-
+        
         for result in results:
             nfe = result.nfe
             tags = getattr(nfe, 'tags', {}) or {}
-
-            # Se não houver tags, mantemos uma linha indicando ausência
-            if not tags:
-                data.append({
-                    "Arquivo": nfe.arquivo,
-                    "Chave NF-e": nfe.chave,
-                    "Item": None,
-                    "TagPath": "",
-                    "TagName": "",
-                    "Valor": "",
-                })
-                continue
-
-            for path, value in tags.items():
-                tag_name = path.split('/')[-1] if path else ''
-                # extrair número do item se path contiver det[<num>] e mapear para código do produto
-                produto_cod = None
-                m = re.search(r"det\[(\d+)\]", path or '')
-                if m:
-                    try:
-                        item_num = int(m.group(1))
-                        # buscar o produto correspondente em nfe.itens
-                        if hasattr(nfe, 'itens'):
-                            for item in nfe.itens:
-                                if item.nItem == item_num:
-                                    produto_cod = item.cProd
-                                    break
-                    except Exception as e:
-                        pass
-
-                data.append({
-                    "Arquivo": nfe.arquivo,
-                    "Chave NF-e": nfe.chave,
-                    "Item": produto_cod if produto_cod else "",
-                    "TagPath": path,
-                    "TagName": tag_name,
-                    "Valor": value if value is not None else "",
-                })
-
-        return pd.DataFrame(data)
+            
+            # Criar linha com informações básicas + todas as tags
+            row = {
+                'Arquivo': nfe.arquivo,
+                'Chave NF-e': nfe.chave,
+                'Número': nfe.nNF,
+            }
+            
+            # Adicionar todas as tags como colunas
+            for tag_path in sorted_tags:
+                # Extrair apenas o nome da tag (última parte do path)
+                tag_name = tag_path.split('/')[-1] if '/' in tag_path else tag_path
+                value = tags.get(tag_path, '')
+                row[tag_name] = value if value is not None else ''
+            
+            data.append(row)
+        
+        # Criar DataFrame e escrever
+        df_tags = pd.DataFrame(data)
+        df_tags.to_excel(writer, sheet_name="Tags", index=False)
     
     def _apply_formatting(self):
         """Aplica formatação ao arquivo Excel."""
@@ -303,7 +296,12 @@ class ExcelReportGenerator:
                 except:
                     pass
             
-            adjusted_width = min(max_length + 2, 50)
+            # Para a aba Tags, usar largura maior na coluna A (Campo)
+            if sheet_name == "Tags" and column_letter == "A":
+                adjusted_width = min(max_length + 2, 80)
+            else:
+                adjusted_width = min(max_length + 2, 50)
+            
             ws.column_dimensions[column_letter].width = adjusted_width
         
         # Formatação de números (2 casas decimais)
@@ -321,117 +319,6 @@ class ExcelReportGenerator:
         # Destacar status na aba Resumo
         if sheet_name == "Resumo NF":
             self._highlight_status_resumo(ws)
-
-        # Formatação para Combined: destacar linhas separadoras (se existirem)
-        if sheet_name == "Combined":
-            self._format_combined(ws)
-
-    def _create_combined_sheet(self, writer, results: List[ComparisonResult]):
-        """Cria uma aba 'Combined' que contém blocos por documento separados por uma linha de cabeçalho."""
-        start_row = 0
-        workbook = writer.book
-        sheet_name = "Combined"
-        # criar sheet vazia para garantir presença
-        workbook.create_sheet(title=sheet_name)
-        ws = workbook[sheet_name]
-
-        for result in results:
-            nfe = result.nfe
-
-            # Cabeçalho separador (arquivo — chave — status)
-            header = f"Arquivo: {nfe.arquivo} | Chave: {nfe.chave} | Status: {result.status_geral.value}"
-            ws.cell(row=start_row + 1, column=1, value=header)
-            ws.cell(row=start_row + 1, column=1).font = Font(bold=True)
-
-            # Informações principais (metadados)
-            meta = {
-                "Número": nfe.nNF,
-                "Série": nfe.serie,
-                "Data Emissão": nfe.dhEmi.strftime("%d/%m/%Y %H:%M") if getattr(nfe, 'dhEmi', None) else "",
-                "Emitente CNPJ": nfe.emit_CNPJ,
-                "Emitente Nome": nfe.emit_xNome,
-                "Emitente UF": nfe.emit_UF,
-            }
-            # Escrever metadados como duas colunas
-            r = start_row + 2
-            for k, v in meta.items():
-                ws.cell(row=r, column=1, value=k)
-                ws.cell(row=r, column=2, value=v)
-                r += 1
-
-            # Itens (se houver)
-            itens_df = None
-            if result.itens_resultado:
-                itens_df = pd.DataFrame([{
-                    "Item": it.nItem,
-                    "Cód. Produto": it.cProd,
-                    "Descrição": it.xProd,
-                    "Base Calc IBS": float(it.base_calc_ibs),
-                    "Base XML IBS": float(it.base_xml_ibs) if it.base_xml_ibs else None,
-                    "Valor XML IBS": float(it.valor_xml_ibs) if it.valor_xml_ibs else None,
-                } for it in result.itens_resultado])
-
-            # Tags (se houver)
-            tags = getattr(nfe, 'tags', {}) or {}
-            tags_df = None
-            if tags:
-                # incluir coluna Item para facilitar busca por item no Combined
-                import re
-                rows = []
-                for k, v in tags.items():
-                    # extrair código do produto se a tag pertence a det[n]
-                    produto_cod = None
-                    m = re.search(r"det\[(\d+)\]", k)
-                    if m:
-                        try:
-                            item_num = int(m.group(1))
-                            # buscar o produto correspondente
-                            if hasattr(nfe, 'itens'):
-                                for item in nfe.itens:
-                                    if item.nItem == item_num:
-                                        produto_cod = item.cProd
-                                        break
-                        except Exception:
-                            pass
-                    rows.append({"Item": produto_cod if produto_cod else "", "TagPath": k, "Valor": v})
-                tags_df = pd.DataFrame(rows)
-
-            # Escrever itens_df e tags_df usando pandas to_excel com startrow
-            write_row = r + 1
-            if itens_df is not None and not itens_df.empty:
-                ws.cell(row=write_row, column=1, value="Itens")
-                ws.cell(row=write_row, column=1).font = Font(bold=True)
-                write_row += 1
-                itens_df.to_excel(writer, sheet_name=sheet_name, startrow=write_row - 1, index=False)
-                # calcular linhas escritas
-                write_row += len(itens_df.index) + 1
-
-            if tags_df is not None and not tags_df.empty:
-                ws.cell(row=write_row, column=1, value="Tags")
-                ws.cell(row=write_row, column=1).font = Font(bold=True)
-                write_row += 1
-                tags_df.to_excel(writer, sheet_name=sheet_name, startrow=write_row - 1, index=False)
-                write_row += len(tags_df.index) + 1
-
-            # Avançar start_row para próximo bloco com uma linha em branco separadora
-            start_row = write_row + 2
-
-        # Depois de escrever via pandas, garantir que writer salva as mudanças (pandas fará no exit)
-
-    def _format_combined(self, ws):
-        """Formatação simples para a aba Combined: ajustar colunas e destacar headers."""
-        # Ajustar largura colunas
-        for column in ws.columns:
-            max_length = 0
-            column_letter = get_column_letter(column[0].column)
-            for cell in column:
-                try:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 70)
-            ws.column_dimensions[column_letter].width = adjusted_width
     
     def _get_number_columns(self, sheet_name: str) -> List[str]:
         """Retorna letras das colunas numéricas por aba."""

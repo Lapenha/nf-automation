@@ -18,6 +18,7 @@ from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont, QIcon
 
 from .cli import NFeValidator
 from .config import load_config, Config
+from .tag_validator import TagValidator, ResultadoValidacao
 
 
 class ValidationThread(QThread):
@@ -165,6 +166,200 @@ class ValidationThread(QThread):
         self._is_running = False
 
 
+class TagValidationThread(QThread):
+    """Thread para validação de tags obrigatórias sem travar a interface."""
+    
+    progress = pyqtSignal(int, int)  # current, total
+    log_message = pyqtSignal(str)
+    finished = pyqtSignal(str, bool)  # output_path, success
+    
+    def __init__(self, xml_paths: List[Path], output_dir: Path, excel_path: Path):
+        super().__init__()
+        self.xml_paths = xml_paths
+        self.output_dir = output_dir
+        self.excel_path = excel_path
+        self._is_running = True
+        
+    def run(self):
+        """Executa a validação de tags em background."""
+        try:
+            self.log_message.emit("🔄 Iniciando validação de tags obrigatórias...")
+            self.log_message.emit(f"📁 {len(self.xml_paths)} arquivo(s) XML encontrado(s)\n")
+            
+            # Cria validador
+            self.log_message.emit("⚙️  Carregando planilha de referência...")
+            validator = TagValidator(self.excel_path)
+            self.log_message.emit(f"✅ {len(validator.tags_obrigatorias)} tags obrigatórias carregadas\n")
+            
+            # Valida XMLs
+            resultados = []
+            total = len(self.xml_paths)
+            
+            for idx, xml_path in enumerate(self.xml_paths, 1):
+                if not self._is_running:
+                    self.log_message.emit("\n❌ Validação cancelada pelo usuário")
+                    return
+                    
+                self.log_message.emit(f"\n⚙️  [{idx}/{total}] Validando: {xml_path.name}")
+                self.progress.emit(idx, total)
+                
+                try:
+                    resultado = validator.validar_xml(xml_path)
+                    resultados.append(resultado)
+                    
+                    if resultado.sucesso:
+                        self.log_message.emit(f"    ✅ Todas as tags obrigatórias presentes")
+                    else:
+                        self.log_message.emit(f"    ⚠️  {len(resultado.tags_ausentes)} tag(s) ausente(s)")
+                        
+                except Exception as e:
+                    self.log_message.emit(f"    ❌ Erro: {str(e)}")
+            
+            # Gera relatório Excel
+            self.log_message.emit("\n📊 Gerando relatório Excel...")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_name = f"relatorio_tags_obrigatorias_{timestamp}.xlsx"
+            report_path = self.output_dir / report_name
+            
+            self._gerar_relatorio_excel(resultados, report_path)
+            
+            # Estatísticas
+            total_sucesso = sum(1 for r in resultados if r.sucesso)
+            total_falha = len(resultados) - total_sucesso
+            
+            self.log_message.emit("\n" + "="*50)
+            self.log_message.emit("📈 RESUMO DA VALIDAÇÃO DE TAGS")
+            self.log_message.emit("="*50)
+            self.log_message.emit(f"✅ XMLs válidos: {total_sucesso}")
+            self.log_message.emit(f"⚠️  XMLs com tags ausentes: {total_falha}")
+            self.log_message.emit(f"📝 Total de XMLs: {len(resultados)}")
+            self.log_message.emit("="*50 + "\n")
+            
+            self.log_message.emit(f"✨ Relatório salvo em:\n   {report_path}\n")
+            self.finished.emit(str(report_path), True)
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            self.log_message.emit(f"\n❌ ERRO: {str(e)}")
+            self.log_message.emit(f"\n🔍 Detalhes técnicos:\n{error_details}")
+            self.finished.emit("", False)
+    
+    def _gerar_relatorio_excel(self, resultados: List[ResultadoValidacao], output_path: Path):
+        """Gera relatório Excel com os resultados da validação."""
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+            
+            wb = openpyxl.Workbook()
+            
+            # Aba 1: Resumo
+            ws_resumo = wb.active
+            ws_resumo.title = "Resumo"
+            
+            # Cabeçalho
+            ws_resumo['A1'] = "RELATÓRIO DE VALIDAÇÃO DE TAGS OBRIGATÓRIAS"
+            ws_resumo['A1'].font = Font(size=14, bold=True)
+            ws_resumo.merge_cells('A1:F1')
+            
+            ws_resumo['A3'] = "Arquivo XML"
+            ws_resumo['B3'] = "Status"
+            ws_resumo['C3'] = "Tags Encontradas"
+            ws_resumo['D3'] = "Total Tags"
+            ws_resumo['E3'] = "Tags Ausentes"
+            ws_resumo['F3'] = "% Completude"
+            
+            for cell in ws_resumo[3]:
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                cell.font = Font(color="FFFFFF", bold=True)
+            
+            # Dados
+            linha = 4
+            for resultado in resultados:
+                ws_resumo[f'A{linha}'] = resultado.xml_path.name
+                ws_resumo[f'B{linha}'] = "✅ OK" if resultado.sucesso else "⚠️ Ausências"
+                ws_resumo[f'C{linha}'] = resultado.tags_encontradas
+                ws_resumo[f'D{linha}'] = resultado.total_tags_obrigatorias
+                ws_resumo[f'E{linha}'] = len(resultado.tags_ausentes)
+                
+                percentual = (resultado.tags_encontradas / resultado.total_tags_obrigatorias * 100) if resultado.total_tags_obrigatorias > 0 else 0
+                ws_resumo[f'F{linha}'] = f"{percentual:.1f}%"
+                
+                # Colorir linha baseado no status
+                if resultado.sucesso:
+                    fill_color = "C6EFCE"  # Verde claro
+                else:
+                    fill_color = "FFEB9C"  # Amarelo claro
+                
+                for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+                    ws_resumo[f'{col}{linha}'].fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+                
+                linha += 1
+            
+            # Ajusta largura das colunas
+            ws_resumo.column_dimensions['A'].width = 50
+            ws_resumo.column_dimensions['B'].width = 15
+            ws_resumo.column_dimensions['C'].width = 18
+            ws_resumo.column_dimensions['D'].width = 15
+            ws_resumo.column_dimensions['E'].width = 18
+            ws_resumo.column_dimensions['F'].width = 15
+            
+            # Aba 2: Detalhes das tags ausentes
+            ws_detalhes = wb.create_sheet("Tags Ausentes")
+            
+            ws_detalhes['A1'] = "TAGS OBRIGATÓRIAS AUSENTES POR ARQUIVO"
+            ws_detalhes['A1'].font = Font(size=14, bold=True)
+            ws_detalhes.merge_cells('A1:G1')
+            
+            ws_detalhes['A3'] = "Arquivo XML"
+            ws_detalhes['B3'] = "Nome da Tag"
+            ws_detalhes['C3'] = "Descrição"
+            ws_detalhes['D3'] = "Observação"
+            ws_detalhes['E3'] = "Elemento"
+            ws_detalhes['F3'] = "Tipo"
+            ws_detalhes['G3'] = "Linha Planilha"
+            
+            for cell in ws_detalhes[3]:
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                cell.font = Font(color="FFFFFF", bold=True)
+            
+            linha = 4
+            for resultado in resultados:
+                if resultado.tags_ausentes:
+                    for tag in resultado.tags_ausentes:
+                        ws_detalhes[f'A{linha}'] = resultado.xml_path.name
+                        ws_detalhes[f'B{linha}'] = tag.nome
+                        ws_detalhes[f'C{linha}'] = tag.descricao
+                        ws_detalhes[f'D{linha}'] = tag.observacao
+                        ws_detalhes[f'E{linha}'] = tag.elemento
+                        ws_detalhes[f'F{linha}'] = tag.tipo
+                        ws_detalhes[f'G{linha}'] = tag.linha
+                        linha += 1
+            
+            # Ajusta largura das colunas
+            ws_detalhes.column_dimensions['A'].width = 50
+            ws_detalhes.column_dimensions['B'].width = 30
+            ws_detalhes.column_dimensions['C'].width = 50
+            ws_detalhes.column_dimensions['D'].width = 50
+            ws_detalhes.column_dimensions['E'].width = 15
+            ws_detalhes.column_dimensions['F'].width = 10
+            ws_detalhes.column_dimensions['G'].width = 18
+            
+            # Salva
+            wb.save(output_path)
+            self.log_message.emit(f"✅ Relatório Excel gerado com sucesso")
+            
+        except Exception as e:
+            self.log_message.emit(f"❌ Erro ao gerar relatório Excel: {e}")
+            raise
+    
+    def stop(self):
+        """Para a thread."""
+        self._is_running = False
+
+
 class DropArea(QFrame):
     """Área para arrastar e soltar arquivos XML."""
     
@@ -228,7 +423,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.xml_files: List[Path] = []
         self.validation_thread: Optional[ValidationThread] = None
+        self.tag_validation_thread: Optional[TagValidationThread] = None
         self.output_dir = Path.home() / "Downloads"
+        
+        # Caminho da planilha de referência
+        base_dir = Path(__file__).parent.parent.parent
+        self.excel_path = base_dir / "planilhabase" / "Mastersaf_Layout_DFe_V3_NFSe_NACIONAL_1_01 - Oficial Reforma.xlsx"
         
         self.init_ui()
         
@@ -312,12 +512,20 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.files_label)
         
         # Botão de processar
-        self.process_btn = QPushButton("▶️ INICIAR VALIDAÇÃO")
+        self.process_btn = QPushButton("▶️ INICIAR VALIDAÇÃO IBS/CBS")
         self.process_btn.setStyleSheet(self.get_button_style("#28a745", 60))
         self.process_btn.clicked.connect(self.start_validation)
         self.process_btn.setEnabled(False)
         self.process_btn.setMinimumHeight(60)
         main_layout.addWidget(self.process_btn)
+        
+        # Botão de validar tags XML
+        self.tag_validation_btn = QPushButton("🏷️ VALIDAR TAGS XML OBRIGATÓRIAS")
+        self.tag_validation_btn.setStyleSheet(self.get_button_style("#17a2b8", 60))
+        self.tag_validation_btn.clicked.connect(self.start_tag_validation)
+        self.tag_validation_btn.setEnabled(False)
+        self.tag_validation_btn.setMinimumHeight(60)
+        main_layout.addWidget(self.tag_validation_btn)
         
         # Barra de progresso
         self.progress_bar = QProgressBar()
@@ -433,12 +641,14 @@ class MainWindow(QMainWindow):
         
         self.update_files_label()
         self.process_btn.setEnabled(len(self.xml_files) > 0)
+        self.tag_validation_btn.setEnabled(len(self.xml_files) > 0)
     
     def clear_files(self):
         """Limpa lista de arquivos."""
         self.xml_files.clear()
         self.update_files_label()
         self.process_btn.setEnabled(False)
+        self.tag_validation_btn.setEnabled(False)
         self.log_text.clear()
         self.log_text.setVisible(False)
         self.progress_bar.setVisible(False)
@@ -486,6 +696,55 @@ class MainWindow(QMainWindow):
             import traceback
             self.log_text.append(traceback.format_exc())
     
+    def start_tag_validation(self):
+        """Inicia a validação de tags obrigatórias."""
+        if not self.xml_files:
+            self.log_text.append("❌ Nenhum arquivo selecionado!")
+            return
+        
+        # Verifica se a planilha existe
+        if not self.excel_path.exists():
+            QMessageBox.critical(
+                self,
+                "Erro",
+                f"❌ Planilha de referência não encontrada:\n{self.excel_path}\n\n"
+                "Por favor, certifique-se de que a planilha está no local correto."
+            )
+            return
+        
+        self.log_text.append(f"🏷️ Iniciando validação de tags de {len(self.xml_files)} arquivo(s)...")
+        
+        # Configura interface
+        self.process_btn.setEnabled(False)
+        self.tag_validation_btn.setEnabled(False)
+        self.folder_btn.setEnabled(False)
+        self.file_btn.setEnabled(False)
+        self.clear_btn.setEnabled(False)
+        
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        
+        self.log_text.append(f"📁 Pasta de saída: {self.output_dir}")
+        self.log_text.append(f"📋 Planilha: {self.excel_path.name}")
+        
+        # Cria e inicia thread
+        try:
+            self.tag_validation_thread = TagValidationThread(
+                self.xml_files, 
+                self.output_dir,
+                self.excel_path
+            )
+            self.tag_validation_thread.progress.connect(self.update_progress)
+            self.tag_validation_thread.log_message.connect(self.add_log_message)
+            self.tag_validation_thread.finished.connect(self.validation_finished)
+            self.log_text.append("✅ Thread de validação criada, iniciando...")
+            self.tag_validation_thread.start()
+            self.log_text.append("✅ Thread iniciada!")
+        except Exception as e:
+            self.log_text.append(f"❌ Erro ao criar thread: {e}")
+            import traceback
+            self.log_text.append(traceback.format_exc())
+    
     def update_progress(self, current: int, total: int):
         """Atualiza barra de progresso."""
         percentage = int((current / total) * 100)
@@ -506,6 +765,7 @@ class MainWindow(QMainWindow):
         """Chamado quando a validação termina."""
         # Reabilita interface
         self.process_btn.setEnabled(True)
+        self.tag_validation_btn.setEnabled(True)
         self.folder_btn.setEnabled(True)
         self.file_btn.setEnabled(True)
         self.clear_btn.setEnabled(True)
