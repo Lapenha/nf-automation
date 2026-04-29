@@ -163,7 +163,7 @@ Você pode habilitar componentes adicionais (IPI, II, ICMS-ST, etc.) editando o 
 
 ---
 
-## 📖 Uso
+## Uso
 
 ### Modo básico (usando arquivo de configuração)
 
