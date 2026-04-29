@@ -1,4 +1,4 @@
-# 🧾 Validador de NF-e IBS/CBS
+# Validador de NF-e IBS/CBS
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -173,7 +173,7 @@ python -m nfe_validator --config config.yaml
 
 ---
 
-## 🛠️ Gerar Instalador Windows (Inno Setup)
+## Gerar Instalador Windows (Inno Setup)
 
 Se você quer distribuir o programa para outros computadores Windows com um instalador profissional (cria atalho no menu Iniciar e na Área de Trabalho), use o Inno Setup.
 
@@ -318,7 +318,7 @@ nf-automation/
 
 ---
 
-## 🔧 Tecnologias Utilizadas
+## Tecnologias Utilizadas
 
 - **lxml**: Parse robusto de XML com suporte a XPath
 - **pandas**: Manipulação de dados tabulares
