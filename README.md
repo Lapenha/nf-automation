@@ -115,7 +115,7 @@ python -m nfe_validator.gui
 
 ---
 
-## ⚙️ Configuração
+## Configuração
 
 ### 1. Copie o arquivo de exemplo
 
