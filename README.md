@@ -9,7 +9,7 @@ Sistema profissional para validar cálculos de IBS (Imposto sobre Bens e Serviç
 
 ---
 
-## 🎯 Funcionalidades
+##  Funcionalidades
 
 - ✅ **Processamento em massa** de XMLs de NF-e (centenas/milhares de arquivos)
 - ✅ **Cálculo automático** da base de IBS/CBS por item com fórmula configurável
@@ -27,14 +27,14 @@ Sistema profissional para validar cálculos de IBS (Imposto sobre Bens e Serviç
 
 ---
 
-## 📋 Requisitos
+##  Requisitos
 
 - **Python 3.11+**
 - Sistema operacional: Windows, Linux ou macOS
 
 ---
 
-## 🚀 Instalação
+##  Instalação
 
 ### 1. Clone ou baixe o projeto
 
@@ -79,7 +79,7 @@ pip install -e .
 
 ---
 
-## 🎨 Interface Gráfica (Nova!)
+##  Interface Gráfica (Nova!)
 
 **Agora com interface visual moderna e intuitiva!**
 
@@ -104,12 +104,12 @@ python -m nfe_validator.gui
 
 ### Recursos da Interface
 
-- 📁 **Arrastar e Soltar**: Arraste XMLs diretamente para a janela
-- 📂 **Seleção de Pasta**: Escolha uma pasta com múltiplos XMLs
-- 📄 **Múltiplos Arquivos**: Adicione arquivos individualmente
-- 📊 **Progresso em Tempo Real**: Barra de progresso e logs visuais
-- 💾 **Salva em Downloads**: Relatório automaticamente salvo na pasta Downloads
-- ✨ **Design Moderno**: Interface limpa e profissional
+-  **Arrastar e Soltar**: Arraste XMLs diretamente para a janela
+-  **Seleção de Pasta**: Escolha uma pasta com múltiplos XMLs
+-  **Múltiplos Arquivos**: Adicione arquivos individualmente
+-  **Progresso em Tempo Real**: Barra de progresso e logs visuais
+-  **Salva em Downloads**: Relatório automaticamente salvo na pasta Downloads
+-  **Design Moderno**: Interface limpa e profissional
 
 > **Veja o [GUI_GUIDE.md](GUI_GUIDE.md) para guia completo com screenshots!**
 
@@ -242,7 +242,7 @@ python -m nfe_validator --input ./xmls --no-recurse
 
 ---
 
-## 📊 Estrutura do Relatório Excel
+## Estrutura do Relatório Excel
 
 ### Aba "Resumo NF"
 Visão consolidada de cada nota fiscal:
@@ -271,7 +271,7 @@ Resumo da configuração usada no processamento (fórmula, tolerâncias, etc.).
 
 ---
 
-## 🧪 Testes
+## Testes
 
 Execute os testes unitários:
 
@@ -289,7 +289,7 @@ python -m pytest tests/test_comparator.py
 
 ---
 
-## 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 nf-automation/
@@ -329,7 +329,7 @@ nf-automation/
 
 ---
 
-## 📌 Regras de Negócio
+## Regras de Negócio
 
 ### Tolerâncias
 
@@ -355,7 +355,7 @@ O parser busca tags IBS/CBS usando `local-name()` para **ignorar namespaces**, e
 
 ---
 
-## 🐛 Solução de Problemas
+## Solução de Problemas
 
 ### Erro: "Nenhum arquivo XML encontrado"
 - Verifique se o caminho do `input_dir` está correto
@@ -376,7 +376,7 @@ O parser busca tags IBS/CBS usando `local-name()` para **ignorar namespaces**, e
 
 ---
 
-## 🤝 Contribuindo
+## Contribuindo
 
 Contribuições são bem-vindas! Para contribuir:
 
@@ -388,13 +388,13 @@ Contribuições são bem-vindas! Para contribuir:
 
 ---
 
-## 📄 Licença
+## Licença
 
 Este projeto está sob a licença MIT. Consulte o arquivo `LICENSE` para mais detalhes.
 
 ---
 
-## 👤 Autor
+## Autor
 
 **Murilo Alapenha Soares**
 
@@ -402,17 +402,17 @@ Este projeto está sob a licença MIT. Consulte o arquivo `LICENSE` para mais de
 
 ---
 
-## 🙏 Agradecimentos
+## Agradecimentos
 
 - Projeto desenvolvido para auxiliar na adequação à Reforma Tributária brasileira
 - Foco em automação e conformidade fiscal
 
 ---
 
-## 📞 Suporte
+## Suporte
 
 Para dúvidas ou problemas, abra uma [issue](https://github.com/muriloalapenhaSoares/nfe-ibs-cbs-validator/issues) no GitHub.
 
 ---
 
-**⚡ Validação fiscal eficiente e confiável com Python!**
+** Validação fiscal eficiente e confiável com Python!**
